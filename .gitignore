@@ -1,3 +1,18 @@
+# Customized
+.vscode/*
+**/.DS_Store
+**/.ipynb_checkpoints
+**/__pycache__
+**/*.p
+**/*.pkl
+**/*.pt
+**/*.zip
+**/*.pyc
+results/
+datasets/
+myenv/
+logs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
