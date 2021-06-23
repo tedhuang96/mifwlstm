@@ -33,7 +33,6 @@ If you find this repo useful, please cite
 }
 ```
 
-
 ### Setup
 All code was developed and tested on Ubuntu 18.04 with CUDA 10.2, Python 3.6.9, and PyTorch 1.7.1. The code was also successfully tested with CUDA 11.2 and PyTorch 1.8.1. 
 ##### 1. Create a virtual environment. (optional)
@@ -42,30 +41,29 @@ virtualenv -p /usr/bin/python3 myenv
 source myenv/bin/activate
 ```
 ##### 2. Install packages.
-If you use CUDA 11.X, run
+If you use CUDA 10.2, run
+```
+pip install scipy
+pip install matplotlib
+pip install tensorboardX
+pip install torch==1.7.1
+```
+or
 ```
 pip install -r requirements.txt
 ```
-or
+If you use CUDA 11.X, run
 ```
 pip install scipy
 pip install matplotlib
 pip install tensorboardX
 pip install torch==1.8.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html
 ```
-If you use CUDA 10.2, run
-```
-pip install scipy
-pip install matplotlib
-pip install tensorboardX
-pip install torch
-```
 ##### 3. Create folders and download datasets.
 ```
 sh scripts/make_dirs.sh
 sh scripts/download_datasets.sh
 ```
-
 ### Training & Evaluation
 ##### 1. Train Warp LSTM.
 ```
@@ -76,13 +74,11 @@ sh scripts/train_wlstm.sh
 sh scripts/evaluate_wlstm.sh
 ```
 ##### 3. Run experiments for Mutable Intention Filter integrated with the trained Warp LSTM, and perform evaluation on intention estimation and trajectory prediction.
-
 ```
 bash scripts/run_mif.sh rebil
 sh scripts/evaluate_intention_mif.sh rebil
 sh scripts/evaluate_trajectories_mif.sh rebil
 ```
-
 Note `rebil` is the abbreviation of Residual Bidirectional LSTM, which is the structure we apply to Warp LSTM. If we want to use the baseline `ilm`, i.e., intention-aware linear model for Mutable Intention Filter, run
 
 ```
@@ -90,7 +86,6 @@ bash scripts/run_mif.sh ilm
 sh scripts/evaluate_intention_mif.sh ilm
 sh scripts/evaluate_trajectories_mif.sh ilm
 ```
-
 ##### 4. If you want to train and evaluate more configurations, run the complete version of the scripts.
 ```
 sh scripts/train_wlstm_complete.sh
@@ -99,6 +94,7 @@ bash scripts/run_mif_complete.sh
 sh scripts/evaluate_intention_mif_complete.sh
 sh scripts/evaluate_trajectories_mif_complete.sh
 ```
+
 ### Quick Test
 ##### 1. Evalulate pretrained models of Warp LSTM.
 ```
