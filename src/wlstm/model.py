@@ -23,7 +23,7 @@ class WarpLSTM(nn.Module):
             - num_lstms # number of LSTMs.
             - dropout # LSTM dropout.
             - bidirectional # Whether LSTM is bidirectional or unidirectional.
-            - end_mask # whether observation and goal position of the trajectory are masked.
+            - end_mask # whether observation of the trajectory is masked as zero, i.e., fixed and not warped.
         Outputs:
             - None
         """
@@ -45,7 +45,7 @@ class WarpLSTM(nn.Module):
         else:
             self.hidden2pos = nn.Linear(hidden_size, 2)
     
-    def forward(self, sb, sm_pred, sl, device='cuda:0'):
+    def forward(self, sb, sm_pred, sl):
         r"""
         Forward function.
         inputs:
@@ -54,6 +54,7 @@ class WarpLSTM(nn.Module):
                 # (batch, time_step, 2)
             - sm_pred
                 # sample mask for prediction.
+                # sm_pred = 1 if the time step is in prediction period, 0 if it is in observation period or padded.
                 # (batch, time_step, 1)
             - sl
                 # sample length.
@@ -61,7 +62,7 @@ class WarpLSTM(nn.Module):
         outputs:
             - sb_improved
                 # trajectory output which is warped sample base.
-                size: (batch, time_step, 2)
+                # (batch, time_step, 2)
         """
         batch, time_step, _ = sb.size()
         sb_improved = sb
@@ -71,11 +72,17 @@ class WarpLSTM(nn.Module):
             sb_ebd = torch.nn.utils.rnn.pack_padded_sequence(sb_ebd, sl.to('cpu'), batch_first=True, enforce_sorted=False)
             out, _ = lstm(sb_ebd)
             out, _ = torch.nn.utils.rnn.pad_packed_sequence(out, batch_first=True)
-            res = self.hidden2pos(out)
+            res = self.hidden2pos(out) # residual
             res = res.reshape(batch, time_step, 2)
             if self.end_mask:
-                # observation and goal position are fixed if end_mask is true.
+                # observation is fixed when end_mask is true.
                 sb_improved = sb_improved + res * sm_pred
             else:
                 sb_improved = sb_improved + res
         return sb_improved
+
+if __name__ == '__main__':
+    # print model parameters
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = WarpLSTM().to(device)
+    print(model)
