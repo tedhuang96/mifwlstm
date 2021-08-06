@@ -1,8 +1,6 @@
 import numpy as np
 
 class IntentionParticle:
-    r"""A particle filter that has particles with intention hypotheses."""
-
     def __init__(self, intention_sampler, particle_num_per_intent=200, num_tpp=12):
         """
         input:

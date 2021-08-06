@@ -13,10 +13,10 @@ class WarpLSTM(nn.Module):
         dropout=0.,
         bidirectional=True,
         end_mask=False,
-        ):
+    ):
         r"""
         Initialize the components.
-        inputs:
+        Inputs:
             - embedding_size # embedding dimension.
             - hidden_size # dimension of hidden state.
             - num_layers # number of layers of one LSTM.
@@ -45,10 +45,15 @@ class WarpLSTM(nn.Module):
         else:
             self.hidden2pos = nn.Linear(hidden_size, 2)
     
-    def forward(self, sb, sm_pred, sl):
+    def forward(
+        self,
+        sb,
+        sm_pred,
+        sl,
+    ):
         r"""
         Forward function.
-        inputs:
+        Inputs:
             - sb 
                 # sample base, i.e. nominal prediction.
                 # (batch, time_step, 2)
@@ -59,7 +64,7 @@ class WarpLSTM(nn.Module):
             - sl
                 # sample length.
                 # (batch, ) 
-        outputs:
+        Outputs:
             - sb_improved
                 # trajectory output which is warped sample base.
                 # (batch, time_step, 2)
