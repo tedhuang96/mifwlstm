@@ -3,7 +3,49 @@ import pickle
 import torch
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
 import torch.nn as nn
-from os.path import join
+from os.path import join, isdir, isfile
+from os import listdir
+import re
+
+from src.wlstm.model import WarpLSTM
+
+def load_warplstm_model(
+    logdir,
+    saved_model_epoch,
+    num_epochs,
+    embedding_size,
+    hidden_size,
+    num_layers,
+    num_lstms,
+    dropout,
+    bidirectional,
+    end_mask,
+    device,
+):
+    if not isdir(logdir):
+        raise RuntimeError('The folder '+logdir+' is not found.')
+    if saved_model_epoch is None:
+        saved_epoch = num_epochs
+    else:
+        saved_epoch = saved_model_epoch
+    for filename in listdir(logdir):
+        if isfile(join(logdir, filename)) and re.search('.*epoch_'+str(saved_epoch)+'.pt', filename):
+            model_filename = join(logdir, filename)
+            model = WarpLSTM(
+                embedding_size=embedding_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                num_lstms=num_lstms,
+                dropout=dropout,
+                bidirectional=bidirectional,
+                end_mask=end_mask,
+            ).to(device)
+            checkpoint = torch.load(model_filename, map_location=device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            print(model_filename + ' is loaded.')
+            return model
+    raise RuntimeError('The model is not saved at epoch '+str(saved_epoch)+' in '+logdir)
+
 
 
 ##### padding functions START #####
@@ -152,7 +194,7 @@ def final_offset_error(x_gt, x_pred, loss_mask):
     oe_masked = offset_error(x_gt, x_pred, loss_mask) # (batch, seq_len)
     foe_list = []
     for i, loss_mask_row in enumerate(loss_mask[:,:,0]): # find the last valid index of 1 in loss mask for each row
-        last_valid_idx = np.where(loss_mask_row==1)[0][-1]
+        last_valid_idx = np.where(loss_mask_row.to('cpu')==1)[0][-1]
         foe_list.append(oe_masked[i, last_valid_idx].unsqueeze(0)) # unsqueeze to help do mean in torch
     foe = torch.cat(foe_list, dim=0).mean()
     return foe

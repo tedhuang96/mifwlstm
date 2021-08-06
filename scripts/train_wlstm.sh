@@ -8,9 +8,9 @@ for lr in 1e-4 ; do
                     echo hidden_size = $hidden_size
                     echo dataset_ver = $dataset_ver
                     echo bidirectional = $bidirectional
-                    CUDA_VISIBLE_DEVICES=1 python -u scripts/train_wlstm.py \
-                        --dataset_ver $dataset_ver --num_epochs 200 \
-                        --save_epochs 10 --compute_baseline --batch_size 64 \
+                    CUDA_VISIBLE_DEVICES=1 python -u scripts/main_wlstm.py \
+                        --dataset_ver $dataset_ver --mode train --num_epochs 200 \
+                        --save_epochs 50 --compute_baseline --batch_size 64 \
                         --num_lstms $num_lstms --lr $lr \
                         $bidirectional $end_mask | tee -a logs/train_wlstm.txt
                 done
