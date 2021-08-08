@@ -1,5 +1,5 @@
 import numpy as np
-from src.mif.intention_application_interface import IntentionApplicationInterface
+from src.api.intention_application_interface import IntentionApplicationInterface
 
 class IntentionParticleFilter:
 
@@ -50,6 +50,7 @@ class IntentionParticleFilter:
         self.x_est = self.intention_application_interface.initialize_x() # ! todo general method # list with length of num_particles (maybe None in initialization.)
         self.intention_mask = self.create_intention_mask()
         self.reset_weights()
+        return
 
     def create_intention_mask(self):
         """
@@ -148,7 +149,7 @@ class IntentionParticleFilter:
         resampled_indices = np.random.choice(self.num_particles, size=self.num_particles, p=self.weight)
         self.intention = self.intention[resampled_indices]
         self.intention_mask = self.create_intention_mask()
-        self.x_est = self.intention_application_interface.resample_x(resampled_indices) # ! todo general method
+        self.x_est = self.intention_application_interface.resample_x(self.x_est, resampled_indices) # ! todo general method
         self.reset_weights()
         return
     
@@ -192,56 +193,3 @@ class IntentionParticleFilter:
         """
         intention_prob_dist = (self.weight * self.intention_mask).sum(axis=1)
         return intention_prob_dist
-
-
-"""
-comments for pedestrian application
-    - intention_mean
-    - num_intentions
-        the number of intentions.
-    - num_particles_per_intention
-        the number of particles set for each intention.
-    - num_tpp (default: 12)
-        number of trajectory points for prediction.
-
-    # self.intention_sampler = intention_sampler
-    # self.intention_coordinates = self.intention_sampler.intent_bottom_left_coordinates + self.intention_sampler.intent_wid
-    # self.num_tpp = num_tpp
-    # intention_sampler,
-    # num_tpp=12,
-    # if self.args.intention_application == 'pedestrian': 
-    #     self.intention_application_interface = PedestrianIntentionApplicationInterface(args)
-
-
-# oe = self.x_pred - x_pred_true[np.newaxis]# offset error (particle_num, num_tpp, 2)
-# aoe = np.mean(np.linalg.norm(oe, axis=2), axis=1) # (particle_num,) # ! gap is aoe
-# self.weight *= np.exp(-tau*aoe)
-# self.weight /= self.weight.sum()
-
-
-    # def predict(self, x_obs, pred_func):
-    #     self.goals = self.intention2goal()
-    #     self.x_pred, _ = pred_func(x_obs, self.goals, self.intention, self.intention_coordinates, num_intentions=self.num_intentions, num_tpp=self.num_tpp)
-    #     return self.x_pred
-    
-    # def predict_till_end(self, x_obs, long_pred_func):
-    #     self.goals = self.intention2goal()
-    #     _, infos = long_pred_func(x_obs, self.goals, self.intention, self.intention_coordinates,  num_intentions=self.num_intentions, num_tpp=self.num_tpp)
-    #     return infos
-
-    def particle_weight_intention_prob_dist(self):
-        ### soft weight ###
-        # weight_balanced = np.log(self.weight+params.WEIGHT_EPS) - np.log(min(self.weight+params.WEIGHT_EPS)) + 1. # (no zero in it is convenient for sampling)
-        # weight_balanced /= sum(weight_balanced)
-        ### original weight ###
-        weight_balanced = self.weight
-        particle_weight = [] # list of num_intentions (3) lists
-        particle_weight_with_zero = self.weight * self.intention_mask# (particle_num,) * (num_intentions, particle_num) -> (num_intentions, particle_num)
-        for intention_index in range(self.num_intentions):
-            particle_weight_intention = particle_weight_with_zero[intention_index, particle_weight_with_zero[intention_index, :].nonzero()]
-            particle_weight.append(np.squeeze(particle_weight_intention, axis=0))
-        return particle_weight, (weight_balanced*self.intention_mask).sum(axis=1)
-    
-    def intention2goal(self):
-        return self.intention_sampler.idx2intent_sampling(self.intention)
-"""

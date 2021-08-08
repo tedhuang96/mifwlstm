@@ -5,7 +5,7 @@ from src.mif.intention_sampler import IntentionSampler
 from src.mif.intention_particle import IntentionParticle
 from src.mif.sample_predictor import SamplePredictor
 
-r"""
+"""
 infos include full prediction in intention_filter_full_prediction,
 where full prediction means prediction from last observed position to the intention.
 This will increase a lot the size of the filtering data.

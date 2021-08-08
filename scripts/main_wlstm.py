@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 from tensorboardX import SummaryWriter
 
-from src.utils import load_preprocessed_train_test_dataset, ilm
+from src.utils import load_preprocessed_train_test_dataset, ilm, args_to_logdir
 from scripts.wlstm.train_wlstm import train_warplstm
 from scripts.wlstm.eval_wlstm import evaluate_warplstm
 from scripts.wlstm.visual_wlstm import visualize_warplstm
@@ -52,15 +52,7 @@ def main(args):
     if args.compute_baseline:
         ilm(zipped_data_train_test)
     ##### Find Log Directory #####
-    writername = 'epoch_'+str(args.num_epochs)+'-num_lstms_'+str(args.num_lstms)+'-lr_'+str(args.lr)
-    if args.bidirectional:
-        writername = writername + '_bi'
-    else:
-        writername = writername + '_uni'
-    if args.end_mask:
-        writername = writername + '_end_mask'
-    print('config: ', writername)
-    logdir = join(pkg_path, 'results', 'wlstm', 'dataset_full_'+str(args.dataset_ver), writername) 
+    logdir = args_to_logdir(args, pkg_path)
     
     if args.mode == 'train':
         if isdir(logdir):

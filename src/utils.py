@@ -9,6 +9,38 @@ import re
 
 from src.wlstm.model import WarpLSTM
 
+
+def load_warplstm_model_by_arguments(args, pkg_path, device):
+    logdir = args_to_logdir(args, pkg_path)
+    model = load_warplstm_model(
+        logdir,
+        saved_model_epoch=None,
+        num_epochs=args.num_epochs,
+        embedding_size=args.embedding_size,
+        hidden_size=args.hidden_size,
+        num_layers=args.num_layers,
+        num_lstms=args.num_lstms,
+        dropout=args.dropout,
+        bidirectional=args.bidirectional,
+        end_mask=args.end_mask,
+        device=device,
+    )
+    return model
+
+
+def args_to_logdir(args, pkg_path):
+    writername = 'epoch_'+str(args.num_epochs)+'-num_lstms_'+str(args.num_lstms)+'-lr_'+str(args.lr)
+    if args.bidirectional:
+        writername = writername + '_bi'
+    else:
+        writername = writername + '_uni'
+    if args.end_mask:
+        writername = writername + '_end_mask'
+    print('config: ', writername)
+    logdir = join(pkg_path, 'results', 'wlstm', 'dataset_full_'+str(args.dataset_ver), writername)
+    return logdir
+    
+
 def load_warplstm_model(
     logdir,
     saved_model_epoch,
