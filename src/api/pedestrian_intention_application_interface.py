@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
@@ -115,7 +116,7 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
             raise RuntimeError('Scene is not found.')
         return
     
-    def propagate_x(self, x_est, intention, intention_mask, x_obs=None):
+    def propagate_x(self, x_est, intention, x_obs=None):
         """
         In pedestrian application, state estimate is not propagated.
         x_est will be replaced instead of propagated in the next iteration of filtering.
@@ -133,13 +134,6 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
             - intention: numpy. :math:`(num_particles,)` Intention hypotheses for all particles. 
             e.g. for num_intentions=3, num_particles_per_intention=5, intention = 
             array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]).
-            - intention_mask: numpy. :math:`(num_intentions, num_particles)` Mask on intention 
-            hypotheses of all particles. # ! may not be required.
-            e.g. for intention = array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]),
-            intention_mask = \n
-            array([[ True,  True,  True,  True,  True, False, False, False, False, False, False, False, False, False, False],\n
-                   [False, False, False, False, False,  True,  True,  True,  True,  True, False, False, False, False, False],\n
-                   [False, False, False, False, False, False, False, False, False, False,  True,  True,  True,  True,  True]])
             - x_obs: numpy. :math:`(t, 2)`. The trajectory observed from beginning till the current 
             time step, i.e., :math:`[1,t]`. Only :math:`[1,t-T_f]` will be used.
         
@@ -151,18 +145,43 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
             :math:`[t-T_f+1, t]`.
         """
         x_obs_truncated = x_obs[:-self.Tf] # (t-Tf, 2)
-        x_est = None
+        x_est = self.predict_trajectories(x_obs_truncated, intention, truncated=True)
+        return x_est
+    
+    def predict_trajectories(self, x_obs, intention, truncated=False):
+        """
+        Predict pedestrian trajectories given observation and intention from particles.
+
+        Inputs:
+            - x_obs: numpy. :math:`(obs_seq_len, 2)`.
+            - intention: numpy. :math:`(num_particles,)` Intention hypotheses for all particles. 
+            e.g. for num_intentions=3, num_particles_per_intention=5, intention = 
+            array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]).
+            - truncated: True means we use prediction function in propagate_x() or we only want 
+            predicted trajectories for evaluation. False means we are performing long term 
+            prediction until the goal position.
+
+        Updated:
+            - None
+            
+        Outputs:
+            - x_est: If truncated=True, numpy. :math:`(num_particles, T_f, 2)`. 
+            Otherwise a numpy array of objects. (num_particles, ), where one object is numpy. 
+            :math:`(variable_t, 2)`. The predicted trajectories of particles. 
+        """
+        if self.method == 'wlstm':
+            x_est = self.predict_warp_lstm(x_obs, intention, truncated=truncated)
+        elif self.method == 'ilm':
+            x_est = self.predict_intention_aware_linear_model(x_obs, intention, truncated=truncated)
+        else:
+            raise RuntimeError('Wrong method for PedestrianIntentionApplicationInterface.')
         return x_est
 
-        # for last_obs_index in range(num_tpp+warmup_step, len(sample_true)-num_tpp, step_per_update): # not include 0.
-        # x_pred_true = sample_true[last_obs_index-num_tpp+1:last_obs_index+1].numpy()
-        # x_obs = sample_true[:last_obs_index-num_tpp+1].numpy()
-        # x_true_remained = sample_true[last_obs_index+1:].numpy()
-        # percentage_curr = float(last_obs_index/len(sample_true))
 
     def predict_intention_aware_linear_model(self, x_obs, intention, truncated=False):
         """
-        Predict trajectories given observation and intention hypotheses.
+        Predict trajectories given observation and intention hypotheses using intention aware 
+        linear model.
 
         Inputs:
             - x_obs: numpy. The observed trajectory. Can be either :math:`(t-T_f, 2)` or 
@@ -170,78 +189,128 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
             - intention: numpy. :math:`(num_particles,)` Intention hypotheses for all particles. 
             e.g. for num_intentions=3, num_particles_per_intention=5, intention = 
             array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]).
-            - truncated: True means we use prediction function in propagate_x(). False means we are 
-            performing long term prediction until the goal position.
+            - truncated: True means we use prediction function in propagate_x() or we only want 
+            predicted trajectories for evaluation. False means we are performing long term 
+            prediction until the goal position.
             
         Updated:
             - None
         
         Outputs:
             - x_est: If truncated=True, numpy. :math:`(num_particles, T_f, 2)`. 
-            Otherwise a numpy array of objects. (num_particles, ), where one object is numpy. :math:`(variable_t, 2)`.
+            Otherwise a numpy array of objects. (num_particles, ), where one object is numpy. 
+            :math:`(variable_t, 2)`. The predicted trajectories of particles.
         """
-        # num_intentions = self.pedestrian_intention_sampler.num_intentions
         num_particles = len(intention)
         if truncated:
             x_est = np.empty((num_particles, self.Tf, 2))
         else:
             x_est = np.empty(num_particles).astype(object)
-        heuristic_distance = np.linalg.norm(self.pedestrian_intention_sampler.intention_center_coordinates \
-            - x_obs[-1], axis=1) # np (num_intentions,)
-        mean_vel_mag = np.mean(np.linalg.norm(x_obs[1:]-x_obs[:-1], axis=1))
-        step_num_noise = np.random.randint(2, 10, size=self.pedestrian_intention_sampler.num_intentions)
-        heuristic_num_steps = (heuristic_distance/mean_vel_mag).astype(int)+step_num_noise
-        heuristic_num_steps[heuristic_num_steps<self.Tf+1] = self.Tf+1
-        
-        goal_position_samples = self.pedestrian_intention_sampler.sampling_goal_positions(intention)
+        heuristic_num_steps, goal_position_samples = self._intention_aware_linear_model_heuristic(x_obs, intention)
         survived_intention_indices = np.unique(intention)
         for i in survived_intention_indices:
             goal_position_samples_i = goal_position_samples[intention==i]
-            # ! Zhe pause here
+            prediction_samples_i_ilm = (np.linspace(x_obs[-1], goal_position_samples_i, \
+                num=heuristic_num_steps[i])).transpose(1,0,2) # (num_particles_of_that_intention, heuristic_steps, 2)
+            if truncated:
+                # do not include x_obs[-1]
+                x_est[intention==i] = prediction_samples_i_ilm[:,1:self.Tf+1] # (num_particles_of_that_intention, Tf, 2)
+            else:
+                x_est[np.where(intention==i)[0]]=list(prediction_samples_i_ilm)
+        return x_est
 
-
-        for i in range(intention_num):
-            sample_goals_i = sample_goals[intentions==i]
-            sample_base_pred_i = (np.linspace(x_obs[-1], sample_goals_i, num=heuristic_num_steps[i])).transpose(1,0,2) # (batch, time_step, 2)
-            x_obs_copy = x_obs[np.newaxis, :-1] * np.ones((sample_base_pred_i.shape[0],1,1))
-            sample_base_i = np.concatenate((x_obs_copy, sample_base_pred_i), axis=1)
-            sb = sample_base_i
-            sample_full_pred_arr[np.where(intentions==i)[0]]=list(sb[:, -heuristic_num_steps[i]:])
-            sample_pred[intentions==i] = sb[:, -heuristic_num_steps[i]:-heuristic_num_steps[i]+num_tpp]
-        return sample_pred, sample_full_pred_arr
-
-        pass
-    
-
-    def ilm_pred_fit(self, x_obs, sample_goals, intentions, intention_coordinates, \
-        intention_num=3, num_tpp=12, silent=True):
+    def predict_warp_lstm(self, x_obs, intention, truncated=False):
         """
-        inputs:
-            - x_obs: np. (t, 2)
+        Predict trajectories given observation and intention hypotheses using Warp LSTM.
 
-        outputs:
-            - sample_pred: np. (340, 20, 2)
-            - sample_full_pred_arr: np array of objects. (340, )
-                - sample: np. (variable_t, 2)
+        Inputs:
+            - x_obs: numpy. The observed trajectory. Can be either :math:`(t-T_f, 2)` or 
+            math:`(t, 2)`, depending on whether we do propagate_x() or long term prediction.
+            - intention: numpy. :math:`(num_particles,)` Intention hypotheses for all particles. 
+            e.g. for num_intentions=3, num_particles_per_intention=5, intention = 
+            array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]).
+            - truncated: True means we use prediction function in propagate_x() or we only want 
+            predicted trajectories for evaluation. False means we are performing long term 
+            prediction until the goal position.
+            
+        Updated:
+            - None
+        
+        Outputs:
+            - x_est: If truncated=True, numpy. :math:`(num_particles, T_f, 2)`. 
+            Otherwise a numpy array of objects. (num_particles, ), where one object is numpy. 
+            :math:`(variable_t, 2)`. The predicted trajectories of particles.
         """
-        sample_full_pred_arr = np.empty(len(intentions)).astype(object)
-        sample_pred = np.empty((len(intentions), num_tpp, 2))
-        heuristic_dist = np.linalg.norm(intention_coordinates-x_obs[-1], axis=1)
+        num_particles = len(intention)
+        if truncated:
+            x_est = np.empty((num_particles, self.Tf, 2))
+        else:
+            x_est = np.empty(num_particles).astype(object)
+        heuristic_num_steps, goal_position_samples = self._intention_aware_linear_model_heuristic(x_obs, intention)
+        survived_intention_indices = np.unique(intention)
+        for i in survived_intention_indices:
+            # different intentions may have different observation ratios, and thus need to use different wlstms.
+            goal_position_samples_i = goal_position_samples[intention==i]
+            if len(goal_position_samples_i) == 0:
+                raise RuntimeError('The intention is not found in particles.')
+            prediction_samples_i = (np.linspace(x_obs[-1], goal_position_samples_i, \
+                num=heuristic_num_steps[i])).transpose(1,0,2) # (num_particles_of_that_intention, heuristic_steps, 2)
+            prediction_samples_i_ilm = prediction_samples_i[:,1:] # (num_particles_of_that_intention, heuristic_steps-1, 2) # pred_seq_len = heuristic_steps-1
+            x_obs_i = x_obs * np.ones((prediction_samples_i_ilm.shape[0],1,1)) # (num_particles_of_that_intention, obs_seq_len, 2)
+            obs_seq_len, pred_seq_len = x_obs_i.shape[1], prediction_samples_i_ilm.shape[1]
+            observation_ratio = float(obs_seq_len)/float(obs_seq_len+pred_seq_len)
+            if observation_ratio <= 0.125:
+                model_index = 0
+            elif observation_ratio <= 0.375:
+                model_index = 1
+            elif observation_ratio <= 0.625:
+                model_index = 2
+            else:
+                model_index = 3
+            sample_base = np.concatenate((x_obs_i, prediction_samples_i_ilm), axis=1) # (num_particles_of_that_intention, obs_seq_len + pred_seq_len, 2)
+            sample_loss_mask = np.concatenate((np.zeros((prediction_samples_i_ilm.shape[0], obs_seq_len, 1)),
+                np.ones((prediction_samples_i_ilm.shape[0], pred_seq_len, 1)), axis=1)) # (num_particles_of_that_intention, obs_seq_len + pred_seq_len, 1)
+            sample_length = np.ones(prediction_samples_i_ilm.shape[0]) * (obs_seq_len+pred_seq_len)
+            sample_base, sample_loss_mask, sample_length = \
+                torch.from_numpy(sample_base).to(self.device), \
+                torch.from_numpy(sample_loss_mask).to(self.device), \
+                torch.from_numpy(sample_length).to(self.device)
+            sample_improved = self.model[model_index](sample_base, sample_loss_mask, sample_length)
+            prediction_samples_i_wlstm = sample_improved[:,-pred_seq_len:] # (num_particles_of_that_intention, heuristic_steps-1, 2)
+            if truncated:
+                x_est[intention==i] = prediction_samples_i_wlstm[:,:self.Tf] # (num_particles_of_that_intention, Tf, 2)
+            else:
+                x_est[np.where(intention==i)[0]]=list(prediction_samples_i_wlstm)
+        return x_est
+ 
+    def _intention_aware_linear_model_heuristic(self, x_obs, intention):
+        """
+        Heuristic part of intention aware linear model. Repeatedly used in both intention aware 
+        linear model prediction and Warp LSTM prediction.
+        
+        Inputs:
+            - x_obs: numpy. The observed trajectory. Can be either :math:`(t-T_f, 2)` or 
+            math:`(t, 2)`, depending on whether we do propagate_x() or long term prediction.
+            - intention: numpy. :math:`(num_particles,)` Intention hypotheses for all particles. 
+            e.g. for num_intentions=3, num_particles_per_intention=5, intention = 
+            array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]).
+            
+        Updated:
+            - None
+        
+        Outputs:
+            - heuristic_num_steps: numpy. :math:`(num_intentions,)`. Approximately how many steps are 
+            required (including the last observed step) to reach the desired goal region (intention).
+            - goal_position_samples: numpy. :math:`(num_particles, 2)` samples of goal positions.
+        """
+        heuristic_distance = np.linalg.norm(self.pedestrian_intention_sampler.intention_center_coordinates \
+            - x_obs[-1], axis=1) # np (num_intentions,)
         mean_vel_mag = np.mean(np.linalg.norm(x_obs[1:]-x_obs[:-1], axis=1))
-        step_num_noise = np.random.randint(2, 10, size=intention_num)
-        heuristic_num_steps = (heuristic_dist/mean_vel_mag).astype(int)+step_num_noise
-        heuristic_num_steps[heuristic_num_steps<num_tpp+1] = num_tpp+1
-        for i in range(intention_num):
-            sample_goals_i = sample_goals[intentions==i]
-            sample_base_pred_i = (np.linspace(x_obs[-1], sample_goals_i, num=heuristic_num_steps[i])).transpose(1,0,2) # (batch, time_step, 2)
-            x_obs_copy = x_obs[np.newaxis, :-1] * np.ones((sample_base_pred_i.shape[0],1,1))
-            sample_base_i = np.concatenate((x_obs_copy, sample_base_pred_i), axis=1)
-            sb = sample_base_i
-            sample_full_pred_arr[np.where(intentions==i)[0]]=list(sb[:, -heuristic_num_steps[i]:])
-            sample_pred[intentions==i] = sb[:, -heuristic_num_steps[i]:-heuristic_num_steps[i]+num_tpp]
-        return sample_pred, sample_full_pred_arr
-
-     
+        step_num_noise = np.random.randint(2, 10, size=self.pedestrian_intention_sampler.num_intentions) # heuristic
+        heuristic_num_steps = (heuristic_distance/mean_vel_mag).astype(int)+step_num_noise
+        heuristic_num_steps[heuristic_num_steps<self.Tf+1] = self.Tf+1
+        goal_position_samples = self.pedestrian_intention_sampler.sampling_goal_positions(intention)
+        return heuristic_num_steps, goal_position_samples
 
 
 def load_edinburgh_pedestrian_intention_sampler():

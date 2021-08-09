@@ -92,6 +92,7 @@ class SamplePredictor():
                     rlstm_index = 2
                 else:
                     rlstm_index = 3
+            
             res_lstm_eval = self.rebil_stages[rlstm_index]
             test_traj_full = self.rebil_inference(x_obs_copy, sample_base_pred_i, res_lstm_eval)
             if not silent:
