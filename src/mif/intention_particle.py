@@ -16,7 +16,7 @@ class IntentionParticle:
         """
         self.intention_sampler = intention_sampler
         self.intention_num = self.intention_sampler.intent_num
-        self.intention_coordinates = self.intention_sampler.intent_bottom_left_coordinates + self.intention_sampler.intent_wid
+        self.intention_coordinates = self.intention_sampler.intent_bottom_left_coordinates + self.intention_sampler.intent_wid # ! should be half of the width
         self.intention = np.arange(self.intention_num).reshape(-1, 1).dot(\
             np.ones(particle_num_per_intent).reshape(1,-1)).reshape(-1).astype(int) # [0,0,...,0,1,1,...,1,2,2,...,2] (particle_num,)
         self.num_tpp = num_tpp
@@ -71,7 +71,6 @@ class IntentionParticle:
         self.goals = self.intention2goal()
         _, infos = long_pred_func(x_obs, self.goals, self.intention, self.intention_coordinates,  intention_num=self.intention_num, num_tpp=self.num_tpp)
         return infos
-        
 
     def particle_weight_intention_prob_dist(self):
         ### soft weight ###

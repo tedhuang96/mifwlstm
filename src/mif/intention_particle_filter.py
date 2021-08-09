@@ -93,12 +93,13 @@ class IntentionParticleFilter:
         self.weight = np.ones(self.num_particles) * (1./self.num_particles)
         return
     
-    def predict(self):
+    def predict(self, x_obs=None):
         """
-        Propagate state estimates forward if there is any.
+        Propagate state estimates forward if there is any. May need observation in the past 
+        to help propagation.
 
         Inputs:
-            - None
+            - x_obs: None or Observation in the past.
         
         Updated:
             - self.x_est
@@ -107,7 +108,7 @@ class IntentionParticleFilter:
             - None
         """
         self.x_est = self.intention_application_interface.propagate_x(self.x_est, \
-            self.intention, self.intention_mask)
+            self.intention, self.intention_mask, x_obs)
         return
     
 

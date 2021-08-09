@@ -76,14 +76,18 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
             or 'wlstm' for warp lstm.
             - scene: e.g. 'edinburgh'.
             - args: arguments related to method.
+                - Tf: lookahead time window.
             - pkg_path: absolute path of the package.
             - device: 'cuda:0' or 'cpu'.
 
         Updated:
-            - self.application: 'pedestrian2D'
+            - self.application: 'pedestrian2D'.
             - self.method
             - self.scene
             - self.device
+            - self.Tf: lookahead time window.
+            - self.model
+            - self.pedestrian_intention_sampler
         
         Outputs:
             - None
@@ -92,16 +96,152 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
         self.method = method
         self.scene = scene
         self.device = device
+        self.Tf = args.Tf
+        # load model of the method
         if self.method == 'wlstm':
-            self.model = load_warplstm_model_by_arguments(args, pkg_path, self.device)
+            # a list of models with different observation ratios
+            self.model = []
+            for dataset_ver in [0, 25, 50, 75]:
+                args.dataset_ver = dataset_ver
+                self.model.append(load_warplstm_model_by_arguments(args, pkg_path, self.device))
         elif self.method == 'ilm':
             self.model = None
         else:
             raise RuntimeError('Wrong method input for PedestrianIntentionApplicationInterface.')
-        if self.scene = 'edinburgh':
-            pass
+        # load sampler of the scene
+        if self.scene == 'edinburgh':
+            self.pedestrian_intention_sampler = load_edinburgh_pedestrian_intention_sampler()
+        else:
+            raise RuntimeError('Scene is not found.')
         return
+    
+    def propagate_x(self, x_est, intention, intention_mask, x_obs=None):
+        """
+        In pedestrian application, state estimate is not propagated.
+        x_est will be replaced instead of propagated in the next iteration of filtering.
+        The input x_est could be None (initialized) or numpy :math:`(num_particles, T_f, 2)`, 
+        but they are not used in propagate_x() in pedestrian application.
 
+        x_est is the trajectory prediction during the period :math:`[t-T_f+1, t]`, where 
+        :math:`t` is the current time step, and :math:`T_f` is the truncated time window.
+        x_obs is the observed trajectory during the period :math:`[1, t]`. Only the observation 
+        during the period :math:`[1, t-T_f]` will be used to make prediction in the period 
+        :math:`[t-T_f+1, t]`.
+
+        Inputs:
+            - x_est: numpy. :math:`(num_particles, T_f, 2)` or None. The predicted trajectories of particles. 
+            - intention: numpy. :math:`(num_particles,)` Intention hypotheses for all particles. 
+            e.g. for num_intentions=3, num_particles_per_intention=5, intention = 
+            array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]).
+            - intention_mask: numpy. :math:`(num_intentions, num_particles)` Mask on intention 
+            hypotheses of all particles. # ! may not be required.
+            e.g. for intention = array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]),
+            intention_mask = \n
+            array([[ True,  True,  True,  True,  True, False, False, False, False, False, False, False, False, False, False],\n
+                   [False, False, False, False, False,  True,  True,  True,  True,  True, False, False, False, False, False],\n
+                   [False, False, False, False, False, False, False, False, False, False,  True,  True,  True,  True,  True]])
+            - x_obs: numpy. :math:`(t, 2)`. The trajectory observed from beginning till the current 
+            time step, i.e., :math:`[1,t]`. Only :math:`[1,t-T_f]` will be used.
+        
+        Updated:
+            - None
+        
+        Outputs:
+            - x_est: numpy. :math:`(num_particles, T_f, 2)`. The prediction during the period 
+            :math:`[t-T_f+1, t]`.
+        """
+        x_obs_truncated = x_obs[:-self.Tf] # (t-Tf, 2)
+        x_est = None
+        return x_est
+
+        # for last_obs_index in range(num_tpp+warmup_step, len(sample_true)-num_tpp, step_per_update): # not include 0.
+        # x_pred_true = sample_true[last_obs_index-num_tpp+1:last_obs_index+1].numpy()
+        # x_obs = sample_true[:last_obs_index-num_tpp+1].numpy()
+        # x_true_remained = sample_true[last_obs_index+1:].numpy()
+        # percentage_curr = float(last_obs_index/len(sample_true))
+
+    def predict_intention_aware_linear_model(self, x_obs, intention, truncated=False):
+        """
+        Predict trajectories given observation and intention hypotheses.
+
+        Inputs:
+            - x_obs: numpy. The observed trajectory. Can be either :math:`(t-T_f, 2)` or 
+            math:`(t, 2)`, depending on whether we do propagate_x() or long term prediction.
+            - intention: numpy. :math:`(num_particles,)` Intention hypotheses for all particles. 
+            e.g. for num_intentions=3, num_particles_per_intention=5, intention = 
+            array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]).
+            - truncated: True means we use prediction function in propagate_x(). False means we are 
+            performing long term prediction until the goal position.
+            
+        Updated:
+            - None
+        
+        Outputs:
+            - x_est: If truncated=True, numpy. :math:`(num_particles, T_f, 2)`. 
+            Otherwise a numpy array of objects. (num_particles, ), where one object is numpy. :math:`(variable_t, 2)`.
+        """
+        # num_intentions = self.pedestrian_intention_sampler.num_intentions
+        num_particles = len(intention)
+        if truncated:
+            x_est = np.empty((num_particles, self.Tf, 2))
+        else:
+            x_est = np.empty(num_particles).astype(object)
+        heuristic_distance = np.linalg.norm(self.pedestrian_intention_sampler.intention_center_coordinates \
+            - x_obs[-1], axis=1) # np (num_intentions,)
+        mean_vel_mag = np.mean(np.linalg.norm(x_obs[1:]-x_obs[:-1], axis=1))
+        step_num_noise = np.random.randint(2, 10, size=self.pedestrian_intention_sampler.num_intentions)
+        heuristic_num_steps = (heuristic_distance/mean_vel_mag).astype(int)+step_num_noise
+        heuristic_num_steps[heuristic_num_steps<self.Tf+1] = self.Tf+1
+        
+        goal_position_samples = self.pedestrian_intention_sampler.sampling_goal_positions(intention)
+        survived_intention_indices = np.unique(intention)
+        for i in survived_intention_indices:
+            goal_position_samples_i = goal_position_samples[intention==i]
+            # ! Zhe pause here
+
+
+        for i in range(intention_num):
+            sample_goals_i = sample_goals[intentions==i]
+            sample_base_pred_i = (np.linspace(x_obs[-1], sample_goals_i, num=heuristic_num_steps[i])).transpose(1,0,2) # (batch, time_step, 2)
+            x_obs_copy = x_obs[np.newaxis, :-1] * np.ones((sample_base_pred_i.shape[0],1,1))
+            sample_base_i = np.concatenate((x_obs_copy, sample_base_pred_i), axis=1)
+            sb = sample_base_i
+            sample_full_pred_arr[np.where(intentions==i)[0]]=list(sb[:, -heuristic_num_steps[i]:])
+            sample_pred[intentions==i] = sb[:, -heuristic_num_steps[i]:-heuristic_num_steps[i]+num_tpp]
+        return sample_pred, sample_full_pred_arr
+
+        pass
+    
+
+    def ilm_pred_fit(self, x_obs, sample_goals, intentions, intention_coordinates, \
+        intention_num=3, num_tpp=12, silent=True):
+        """
+        inputs:
+            - x_obs: np. (t, 2)
+
+        outputs:
+            - sample_pred: np. (340, 20, 2)
+            - sample_full_pred_arr: np array of objects. (340, )
+                - sample: np. (variable_t, 2)
+        """
+        sample_full_pred_arr = np.empty(len(intentions)).astype(object)
+        sample_pred = np.empty((len(intentions), num_tpp, 2))
+        heuristic_dist = np.linalg.norm(intention_coordinates-x_obs[-1], axis=1)
+        mean_vel_mag = np.mean(np.linalg.norm(x_obs[1:]-x_obs[:-1], axis=1))
+        step_num_noise = np.random.randint(2, 10, size=intention_num)
+        heuristic_num_steps = (heuristic_dist/mean_vel_mag).astype(int)+step_num_noise
+        heuristic_num_steps[heuristic_num_steps<num_tpp+1] = num_tpp+1
+        for i in range(intention_num):
+            sample_goals_i = sample_goals[intentions==i]
+            sample_base_pred_i = (np.linspace(x_obs[-1], sample_goals_i, num=heuristic_num_steps[i])).transpose(1,0,2) # (batch, time_step, 2)
+            x_obs_copy = x_obs[np.newaxis, :-1] * np.ones((sample_base_pred_i.shape[0],1,1))
+            sample_base_i = np.concatenate((x_obs_copy, sample_base_pred_i), axis=1)
+            sb = sample_base_i
+            sample_full_pred_arr[np.where(intentions==i)[0]]=list(sb[:, -heuristic_num_steps[i]:])
+            sample_pred[intentions==i] = sb[:, -heuristic_num_steps[i]:-heuristic_num_steps[i]+num_tpp]
+        return sample_pred, sample_full_pred_arr
+
+     
 
 
 def load_edinburgh_pedestrian_intention_sampler():
@@ -179,9 +319,10 @@ class PedestrianIntentionSampler:
         Updated:
             - self.intention_width
             - self.num_intentions
-            - self.intention_bottomleft_coordinates
-            - self.scene_xlim
-            - self.scene_ylim
+            - self.intention_bottomleft_coordinates: numpy. :math:`(num_intentions, 2)`
+            - self.intention_center_coordinates: numpy. :math:`(num_intentions, 2)`
+            - self.scene_xlim: tuple. :math:`(2,)`
+            - self.scene_ylim: tuple. :math:`(2,)`
         
         Outputs:
             - None
@@ -189,33 +330,10 @@ class PedestrianIntentionSampler:
         self.intention_width = intention_width
         self.num_intentions = num_intentions
         self.intention_bottomleft_coordinates = intention_bottomleft_coordinates
+        self.intention_center_coordinates = self.intention_bottomleft_coordinates \
+            + self.intention_width/2.
         self.scene_xlim, self.scene_ylim = scene_xlim, scene_ylim
         return
-
-        
-    def visualize_intention(self, traj_end_pos=None):
-        """
-        Visualize the scene with intentions and end positions of trajectories if any.
-
-        Inputs:
-            - traj_end_pos: None or numpy. :math:`(num_trajectories, 2)` End positions of trajectories.
-
-        Updated:
-            - None
-        
-        Outputs:
-            - fig
-            - ax
-        """
-        fig, ax = plt.subplots()
-        if traj_end_pos is not None:
-            ax.plot(traj_end_pos[:, 0], traj_end_pos[:, 1], 'b.')
-        for intent_bottom_left in self.intention_bottomleft_coordinates:
-            rect = patches.Rectangle(intent_bottom_left, self.intention_width, self.intention_width,linewidth=1,edgecolor='k',facecolor='none',zorder=3)
-            ax.add_patch(rect)
-        ax.set(xlim=self.scene_xlim, ylim=self.scene_ylim)
-        ax.axis('scaled')
-        return fig, ax
         
     def position_to_intention(self, position):
         """
@@ -232,24 +350,81 @@ class PedestrianIntentionSampler:
         """
         # ! Original function name: belong2intent
         vec_bl_to_pos = position - self.intention_bottomleft_coordinates
-        bool_flag = ((vec_bl_to_pos[:, 0] > 0) * (vec_bl_to_pos[:, 0] < self.intention_width)) * \
-            ((vec_bl_to_pos[:, 1] > 0) * (vec_bl_to_pos[:, 1] < self.intention_width))
+        bool_flag = ((vec_bl_to_pos[:, 0] > 0) * (vec_bl_to_pos[:, 0] < self.intention_width)) \
+            * ((vec_bl_to_pos[:, 1] > 0) * (vec_bl_to_pos[:, 1] < self.intention_width))
         if len(np.where(bool_flag)[0]) == 0:
             return None
         else:
             return np.where(bool_flag)[0][0] # index of intention
-        # ! Zhe Pause Here
     
-    def idx2intent_sampling(self, intent_idx):
-        intent_bf_samples = self.intention_bottomleft_coordinates[intent_idx]
-        sample_noise = np.random.uniform(low=0., high=self.intention_width, \
-                                         size=intent_bf_samples.shape)
-        intent_samples = intent_bf_samples + sample_noise
-        return intent_samples
+    def sampling_goal_positions(self, intention_indices):
+        """
+        Sample goal positions given intention indices. One goal position is sampled for
+        each intention index.
+
+        Inputs:
+            - intention_indices: numpy. :math:`(num_particles,)` indices of intention 
+            hypotheses from particles.
+
+        Updated:
+            - None
+        
+        Outputs:
+            - goal_position_samples: numpy. :math:`(num_particles, 2)` samples of goal 
+            positions.
+        """
+        # ! Original function name: idx2intent_sampling
+        intention_bl_samples = self.intention_bottomleft_coordinates[intention_indices]
+        samples_noise = np.random.uniform(low=0., high=self.intention_width, \
+            size=intention_bl_samples.shape)
+        goal_position_samples = intention_bl_samples + samples_noise
+        return goal_position_samples
+
+    def uniform_sampling_goal_positions(self, num_samples_per_intention=20):
+        """
+        Sample a fixed amount of goal positions from each potential intention.
+
+        Inputs:
+            - num_samples_per_intention: The number of goal position samples for each 
+            intention.
+
+        Updated:
+            - None
+        
+        Outputs:
+            - goal_position_samples: numpy. 
+            :math:`(num_intentions*num_samples_per_intention, 2)` 
+            The goal position samples from all potential intentions.
+        """
+        # ! Original function name: uniform_sampling
+        samples_noise = np.random.uniform(low=0., high=self.intention_width, \
+            size=(self.num_intentions, num_samples_per_intention, 2))
+        goal_position_samples = samples_noise \
+            + self.intention_bottomleft_coordinates[:, np.newaxis, :]
+        goal_position_samples = goal_position_samples.reshape(-1, 2)
+        return goal_position_samples
     
-    def uniform_sampling(self, sample_num_per_intent=20):
-        sample_noise = np.random.uniform(low=0., high=self.intention_width, \
-                                         size=(self.num_intentions, sample_num_per_intent, 2))
-        intent_samples = sample_noise + self.intention_bottomleft_coordinates[:, np.newaxis, :]
-        intent_samples = intent_samples.reshape(-1, 2)
-        return intent_samples
+    def visualize_intention(self, goal_positions=None):
+        """
+        Visualize the scene with intentions and end positions of trajectories if any.
+
+        Inputs:
+            - goal_positions: None or numpy. :math:`(num_trajectories, 2)` End positions of trajectories.
+
+        Updated:
+            - None
+        
+        Outputs:
+            - fig
+            - ax
+        """
+        fig, ax = plt.subplots()
+        if goal_positions is not None:
+            ax.plot(goal_positions[:, 0], goal_positions[:, 1], 'b.')
+        for intent_bottom_left in self.intention_bottomleft_coordinates:
+            rect = patches.Rectangle(intent_bottom_left, self.intention_width, \
+                self.intention_width,linewidth=1,edgecolor='k',facecolor='none',zorder=3)
+            ax.add_patch(rect)
+        ax.set(xlim=self.scene_xlim, ylim=self.scene_ylim)
+        ax.axis('scaled')
+        return fig, ax

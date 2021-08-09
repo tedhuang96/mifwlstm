@@ -26,6 +26,7 @@ class SamplePredictor():
         rebil_stages = []
         for dataset_ver in [0, 25, 50, 75]:
             logdir = join(pkg_path, 'results', 'wlstm', 'dataset_full_'+str(args.dataset_ver), writername)
+            # ! bug here: should not be args.dataset_ver, but dataset_ver
             rebil = load_rebil_model(args, logdir, device=self.device)
             rebil_stages.append(rebil)
         return rebil_stages

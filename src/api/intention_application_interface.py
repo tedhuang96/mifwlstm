@@ -36,7 +36,7 @@ class IntentionApplicationInterface:
         x_est = None
         return x_est
     
-    def propagate_x(x_est, intention, intention_mask):
+    def propagate_x(self, x_est, intention, intention_mask, x_obs=None):
         """
         Propagate state estimate forward with intention hypotheses. The default output is None.
 
@@ -52,7 +52,7 @@ class IntentionApplicationInterface:
             array([[ True,  True,  True,  True,  True, False, False, False, False, False, False, False, False, False, False],\n
                    [False, False, False, False, False,  True,  True,  True,  True,  True, False, False, False, False, False],\n
                    [False, False, False, False, False, False, False, False, False, False,  True,  True,  True,  True,  True]])
-
+            - x_obs: None or Observation in the past.
         Updated:
             - None
         
@@ -62,7 +62,7 @@ class IntentionApplicationInterface:
         x_est = None
         return x_est
     
-    def compare_observation(x_est, x_obs):
+    def compare_observation(self, x_est, x_obs):
         """
         Compute the difference between the state estimate against observation. 
         The default output is zero array.
@@ -87,7 +87,7 @@ class IntentionApplicationInterface:
             raise RuntimeError('x_est is not None nor list. '\
                               +'You should use compare_observation() in the child class.')
 
-    def resample_x(x_est, resampled_indices):
+    def resample_x(self, x_est, resampled_indices):
         """
         Use the resampled indices to re-organize the state estimates.
 
