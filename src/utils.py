@@ -236,9 +236,10 @@ def final_offset_error(x_gt, x_pred, loss_mask):
 ##### load datasets START #####
 def load_preprocessed_train_test_dataset(pkg_path, dataset_ver=0):
     """
-    inputs:
+    Inputs:
         - dataset_ver: int. 0, 25, 50, or 75 to represent the percentage of observation.
-    outputs:
+    
+    Outputs:
         - traj_base_train: list of tensors with shape (time_step, 2)
         - traj_true_train: list of tensors with shape (time_step, 2)
         - traj_loss_mask_train: list of tensors with shape (time_step, 1)

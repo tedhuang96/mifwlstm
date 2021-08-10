@@ -36,7 +36,7 @@ class IntentionApplicationInterface:
         x_est = None
         return x_est
     
-    def propagate_x(self, x_est, intention, intention_mask, x_obs=None):
+    def propagate_x(self, x_est, intention, x_obs=None):
         """
         Propagate state estimate forward with intention hypotheses. The default output is None.
 
@@ -45,13 +45,6 @@ class IntentionApplicationInterface:
             - intention: numpy. :math:`(num_particles,)` Intention hypotheses for all particles. 
             e.g. for num_intentions=3, num_particles_per_intention=5, intention = 
             array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]).
-            - intention_mask: numpy. :math:`(num_intentions, num_particles)` Mask on intention 
-            hypotheses of all particles.
-            e.g. for intention = array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]),
-            intention_mask = \n
-            array([[ True,  True,  True,  True,  True, False, False, False, False, False, False, False, False, False, False],\n
-                   [False, False, False, False, False,  True,  True,  True,  True,  True, False, False, False, False, False],\n
-                   [False, False, False, False, False, False, False, False, False, False,  True,  True,  True,  True,  True]])
             - x_obs: None or Observation in the past.
         Updated:
             - None

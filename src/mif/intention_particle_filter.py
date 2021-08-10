@@ -44,10 +44,38 @@ class IntentionParticleFilter:
         """
         self.num_intentions = num_intentions
         self.num_particles = self.num_intentions * num_particles_per_intention
-        self.intention = np.arange(self.num_intentions).reshape(-1, 1).dot(\
-            np.ones(num_particles_per_intention).reshape(1,-1)).reshape(-1).astype(int)
         self.intention_application_interface = intention_application_interface
-        self.x_est = self.intention_application_interface.initialize_x() # ! todo general method # list with length of num_particles (maybe None in initialization.)
+        self.reset()
+        return
+
+    def reset(self):
+        """
+        Reset the intention particle filter.
+
+        Inputs:
+            - None
+
+        Updated:
+            - self.intention: numpy. :math:`(num_particles,)` Intention hypotheses for all particles. 
+            e.g. for num_intentions=3, num_particles_per_intention=5, self.intention = 
+            array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]).
+            - self.x_est: list of length :math:`num_particles` or None. The state estimates of particles. 
+            - self.intention_mask: numpy. :math:`(num_intentions, num_particles)` Mask on intention 
+            hypotheses of all particles.
+            e.g. for self.intention = array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]),
+            self.intention_mask = \n
+            array([[ True,  True,  True,  True,  True, False, False, False, False, False, False, False, False, False, False],\n
+                    [False, False, False, False, False,  True,  True,  True,  True,  True, False, False, False, False, False],\n
+                    [False, False, False, False, False, False, False, False, False, False,  True,  True,  True,  True,  True]])
+            - self.weight: numpy. :math:`(num_particles,)` Particle weights. e.g. for 
+            num_particles=10, weight = array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+            
+        Outputs:
+            - None
+        """
+        self.intention = np.arange(self.num_intentions).reshape(-1, 1).dot(\
+            np.ones(int(self.num_particles/self.num_intentions)).reshape(1,-1)).reshape(-1).astype(int)
+        self.x_est = self.intention_application_interface.initialize_x()
         self.intention_mask = self.create_intention_mask()
         self.reset_weights()
         return
@@ -108,7 +136,7 @@ class IntentionParticleFilter:
             - None
         """
         self.x_est = self.intention_application_interface.propagate_x(self.x_est, \
-            self.intention, self.intention_mask, x_obs)
+            self.intention, x_obs)
         return
     
 
@@ -126,7 +154,7 @@ class IntentionParticleFilter:
         Outputs:
             - None
         """
-        gap = self.intention_application_interface.compare_observation(self.x_est, x_obs) # ! todo general method # (num_particles,)
+        gap = self.intention_application_interface.compare_observation(self.x_est, x_obs)
         self.weight *= np.exp(-tau*gap)
         self.weight /= self.weight.sum()
         return
@@ -150,7 +178,7 @@ class IntentionParticleFilter:
         resampled_indices = np.random.choice(self.num_particles, size=self.num_particles, p=self.weight)
         self.intention = self.intention[resampled_indices]
         self.intention_mask = self.create_intention_mask()
-        self.x_est = self.intention_application_interface.resample_x(self.x_est, resampled_indices) # ! todo general method
+        self.x_est = self.intention_application_interface.resample_x(self.x_est, resampled_indices)
         self.reset_weights()
         return
     
@@ -194,3 +222,18 @@ class IntentionParticleFilter:
         """
         intention_prob_dist = (self.weight * self.intention_mask).sum(axis=1)
         return intention_prob_dist
+    
+    def get_intention(self):
+        """
+        Return self.intention.
+
+        Inputs:
+            - None
+
+        Updated:
+            - None
+
+        Outputs:
+            - intention: numpy. :math:`(num_particles,)` Intention hypotheses for all particles.
+        """
+        return self.intention

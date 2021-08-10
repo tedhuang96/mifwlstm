@@ -4,59 +4,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
 from src.api.intention_application_interface import IntentionApplicationInterface
-from src.utils import load_warplstm_model_by_arguments
+from src.utils import average_offset_error, load_warplstm_model_by_arguments
 
-"""
-comments for pedestrian application
-    - intention_mean
-    - num_intentions
-        the number of intentions.
-    - num_particles_per_intention
-        the number of particles set for each intention.
-    - num_tpp (default: 12)
-        number of trajectory points for prediction.
-
-    # self.intention_sampler = intention_sampler
-    # self.intention_coordinates = self.intention_sampler.intention_bottomleft_coordinates + self.intention_sampler.intention_width
-    # self.num_tpp = num_tpp
-    # intention_sampler,
-    # num_tpp=12,
-    # if self.args.intention_application == 'pedestrian': 
-    #     self.intention_application_interface = PedestrianIntentionApplicationInterface(args)
-
-
-# oe = self.x_pred - x_pred_true[np.newaxis]# offset error (particle_num, num_tpp, 2)
-# aoe = np.mean(np.linalg.norm(oe, axis=2), axis=1) # (particle_num,) # ! gap is aoe
-# self.weight *= np.exp(-tau*aoe)
-# self.weight /= self.weight.sum()
-
-
-    # def predict(self, x_obs, pred_func):
-    #     self.goals = self.intention2goal()
-    #     self.x_pred, _ = pred_func(x_obs, self.goals, self.intention, self.intention_coordinates, num_intentions=self.num_intentions, num_tpp=self.num_tpp)
-    #     return self.x_pred
-    
-    # def predict_till_end(self, x_obs, long_pred_func):
-    #     self.goals = self.intention2goal()
-    #     _, infos = long_pred_func(x_obs, self.goals, self.intention, self.intention_coordinates,  num_intentions=self.num_intentions, num_tpp=self.num_tpp)
-    #     return infos
-
-    def particle_weight_intention_prob_dist(self):
-        ### soft weight ###
-        # weight_balanced = np.log(self.weight+params.WEIGHT_EPS) - np.log(min(self.weight+params.WEIGHT_EPS)) + 1. # (no zero in it is convenient for sampling)
-        # weight_balanced /= sum(weight_balanced)
-        ### original weight ###
-        weight_balanced = self.weight
-        particle_weight = [] # list of num_intentions (3) lists
-        particle_weight_with_zero = self.weight * self.intention_mask# (particle_num,) * (num_intentions, particle_num) -> (num_intentions, particle_num)
-        for intention_index in range(self.num_intentions):
-            particle_weight_intention = particle_weight_with_zero[intention_index, particle_weight_with_zero[intention_index, :].nonzero()]
-            particle_weight.append(np.squeeze(particle_weight_intention, axis=0))
-        return particle_weight, (weight_balanced*self.intention_mask).sum(axis=1)
-    
-    def intention2goal(self):
-        return self.intention_sampler.idx2intent_sampling(self.intention)
-"""
 
 class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
     def __init__(
@@ -130,7 +79,8 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
         :math:`[t-T_f+1, t]`.
 
         Inputs:
-            - x_est: numpy. :math:`(num_particles, T_f, 2)` or None. The predicted trajectories of particles. 
+            - x_est: None. The predicted trajectories of particles. It is not passed from the 
+            previous generation of particles. So in the input x_est should be None.
             - intention: numpy. :math:`(num_particles,)` Intention hypotheses for all particles. 
             e.g. for num_intentions=3, num_particles_per_intention=5, intention = 
             array([0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2]).
@@ -148,6 +98,57 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
         x_est = self.predict_trajectories(x_obs_truncated, intention, truncated=True)
         return x_est
     
+    def compare_observation(self, x_est, x_obs):
+        """
+        Compute the difference between the state estimate against observation. 
+
+        Inputs:
+            - x_est: numpy. :math:`(num_particles, T_f, 2)`. The prediction during the period 
+            :math:`[t-T_f+1, t]`.
+            - x_obs: numpy. :math:`(t, 2)`. The trajectory observed from beginning till the current 
+            time step, i.e., :math:`[1,t]`. Only :math:`[t-T_f+1, t]` will be used.
+
+        Updated:
+            - None
+        
+        Outputs:
+            - gap: numpy. :math:`(num_particles,)`. The difference between x_est and x_obs.
+        """
+        if x_est is None:
+            raise RuntimeError('x_est is None during comparison against x_obs.')
+        elif isinstance(x_est, np.ndarray):
+            x_obs_compared = x_obs[np.newaxis, -self.Tf:] # (1, Tf, 2)
+            compared_offset_error = x_est - x_obs_compared # (num_particles, T_f, 2)
+            gap = np.mean(np.linalg.norm(compared_offset_error, axis=2), axis=1) # (num_particles,)
+            return gap
+        else:
+            raise RuntimeError('x_est is not numpy.ndarray for compare_observation() in '+\
+                'PedestrianIntentionApplicationInterface.')
+
+    def resample_x(self, x_est, resampled_indices):
+        """
+        Use the resampled indices to re-organize the state estimates.
+
+        Inputs:
+            - x_est: list of length :math:`num_particles` or None. The state estimates of particles. 
+            - resampled_indices: numpy. :math:`(num_particles,)` The resampled integer indices of 
+            particles.
+
+        Updated:
+            - None
+        
+        Outputs:
+            - resampled_x_est: None. In pedestrian application, x_est is not passed to the 
+            resampled particles.
+        """
+        if x_est is None:
+            return None
+        elif isinstance(x_est, np.ndarray):
+            return None
+        else:
+            raise RuntimeError('x_est is not numpy.ndarray nor None for resample_x() in '+\
+                'PedestrianIntentionApplicationInterface.')
+
     def predict_trajectories(self, x_obs, intention, truncated=False):
         """
         Predict pedestrian trajectories given observation and intention from particles.
@@ -269,14 +270,14 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
                 model_index = 3
             sample_base = np.concatenate((x_obs_i, prediction_samples_i_ilm), axis=1) # (num_particles_of_that_intention, obs_seq_len + pred_seq_len, 2)
             sample_loss_mask = np.concatenate((np.zeros((prediction_samples_i_ilm.shape[0], obs_seq_len, 1)),
-                np.ones((prediction_samples_i_ilm.shape[0], pred_seq_len, 1)), axis=1)) # (num_particles_of_that_intention, obs_seq_len + pred_seq_len, 1)
+                np.ones((prediction_samples_i_ilm.shape[0], pred_seq_len, 1))), axis=1) # (num_particles_of_that_intention, obs_seq_len + pred_seq_len, 1)
             sample_length = np.ones(prediction_samples_i_ilm.shape[0]) * (obs_seq_len+pred_seq_len)
             sample_base, sample_loss_mask, sample_length = \
                 torch.from_numpy(sample_base).to(self.device), \
                 torch.from_numpy(sample_loss_mask).to(self.device), \
                 torch.from_numpy(sample_length).to(self.device)
             sample_improved = self.model[model_index](sample_base, sample_loss_mask, sample_length)
-            prediction_samples_i_wlstm = sample_improved[:,-pred_seq_len:] # (num_particles_of_that_intention, heuristic_steps-1, 2)
+            prediction_samples_i_wlstm = sample_improved[:,-pred_seq_len:].detach().to('cpu').numpy() # (num_particles_of_that_intention, heuristic_steps-1, 2)
             if truncated:
                 x_est[intention==i] = prediction_samples_i_wlstm[:,:self.Tf] # (num_particles_of_that_intention, Tf, 2)
             else:
@@ -303,6 +304,8 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
             required (including the last observed step) to reach the desired goal region (intention).
             - goal_position_samples: numpy. :math:`(num_particles, 2)` samples of goal positions.
         """
+        if len(x_obs) <= 1:
+            raise RuntimeError("The time steps of x_obs has to be at least 2.")
         heuristic_distance = np.linalg.norm(self.pedestrian_intention_sampler.intention_center_coordinates \
             - x_obs[-1], axis=1) # np (num_intentions,)
         mean_vel_mag = np.mean(np.linalg.norm(x_obs[1:]-x_obs[:-1], axis=1))
@@ -311,6 +314,21 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
         heuristic_num_steps[heuristic_num_steps<self.Tf+1] = self.Tf+1
         goal_position_samples = self.pedestrian_intention_sampler.sampling_goal_positions(intention)
         return heuristic_num_steps, goal_position_samples
+    
+    def get_num_intentions(self):
+        """
+        Return number of potential intentions.
+        
+        Inputs:
+            - None
+            
+        Updated:
+            - None
+        
+        Outputs:
+            - num_intentions: Number of potential intentions in the scene.
+        """
+        return self.pedestrian_intention_sampler.num_intentions
 
 
 def load_edinburgh_pedestrian_intention_sampler():
