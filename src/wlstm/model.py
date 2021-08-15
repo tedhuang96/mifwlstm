@@ -56,19 +56,21 @@ class WarpLSTM(nn.Module):
         Inputs:
             - sb 
                 # sample base, i.e. nominal prediction.
-                # (batch, time_step, 2)
+                # (batch, time_step, 2) # torch.float32
             - sm_pred
                 # sample mask for prediction.
                 # sm_pred = 1 if the time step is in prediction period, 0 if it is in observation period or padded.
-                # (batch, time_step, 1)
+                # (batch, time_step, 1) # torch.float32
             - sl
                 # sample length.
-                # (batch, ) 
+                # (batch, ) # torch.int64
         Outputs:
             - sb_improved
                 # trajectory output which is warped sample base.
                 # (batch, time_step, 2)
         """
+        # print(sm_pred.dtype)
+        # print(sl.dtype)
         batch, time_step, _ = sb.size()
         sb_improved = sb
         for lstm in self.lstms:

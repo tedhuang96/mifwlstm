@@ -84,16 +84,15 @@ intention_particle_filter = IntentionParticleFilter(
 )
 
 _, _, _, _, traj_true_test, _ = load_preprocessed_train_test_dataset(pkg_path, dataset_ver=0)
-offline_trajectories_dataset = [trajectory.numpy() for trajectory in traj_true_test] # list of np.ndarray (t, 2)
+offline_trajectories_dataset = np.array([trajectory.numpy() for trajectory in traj_true_test], dtype=object) # np.ndarray of np.ndarray (variable_t, 2)
 offline_trajectories_indices = np.random.randint(0,len(offline_trajectories_dataset),size=10)
 offline_trajectories_set = offline_trajectories_dataset[offline_trajectories_indices] # list of len 10 of np.ndarray (variable_t, 2)
-
 filtering_history_data = []
 start_time = time.time()
 for trajectory in offline_trajectories_set:
     # trajectory: (variable_t, 2)
     filtering_history = {}
-    ground_truth_intention = pedestrian_intention_application_interface.position_to_intention(trajectory[-1])
+    ground_truth_intention = pedestrian_intention_application_interface.pedestrian_intention_sampler.position_to_intention(trajectory[-1])
     intention_particle_filter.reset()
     filtering_history['trajectory'] = trajectory
     filtering_history['ground_truth_intention'] = ground_truth_intention
@@ -124,6 +123,7 @@ for trajectory in offline_trajectories_set:
         filtering_history['predicted_trajectories'].append(predicted_trajectories)
     filtering_history_data.append(filtering_history)
 print('time to filter: {0:.2f} min'.format((time.time()-start_time)/60.))
+# print('time to filter: {0:.2f} sec'.format(time.time()-start_time))
 
 result_filename = 'filtering_history_data.p'
 with open(result_filename, 'wb') as f:

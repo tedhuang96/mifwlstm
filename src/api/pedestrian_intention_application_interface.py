@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
 from src.api.intention_application_interface import IntentionApplicationInterface
-from src.utils import average_offset_error, load_warplstm_model_by_arguments
+from src.utils import load_warplstm_model_by_arguments
 
 
 class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
@@ -273,9 +273,9 @@ class PedestrianIntentionApplicationInterface(IntentionApplicationInterface):
                 np.ones((prediction_samples_i_ilm.shape[0], pred_seq_len, 1))), axis=1) # (num_particles_of_that_intention, obs_seq_len + pred_seq_len, 1)
             sample_length = np.ones(prediction_samples_i_ilm.shape[0]) * (obs_seq_len+pred_seq_len)
             sample_base, sample_loss_mask, sample_length = \
-                torch.from_numpy(sample_base).to(self.device), \
-                torch.from_numpy(sample_loss_mask).to(self.device), \
-                torch.from_numpy(sample_length).to(self.device)
+                torch.from_numpy(sample_base).float().to(self.device), \
+                torch.from_numpy(sample_loss_mask).float().to(self.device), \
+                torch.from_numpy(sample_length).int().to(self.device)
             sample_improved = self.model[model_index](sample_base, sample_loss_mask, sample_length)
             prediction_samples_i_wlstm = sample_improved[:,-pred_seq_len:].detach().to('cpu').numpy() # (num_particles_of_that_intention, heuristic_steps-1, 2)
             if truncated:
