@@ -7,7 +7,7 @@ This is the implementation for the paper
 
 published in [RA-L](https://www.ieee-ras.org/publications/ra-l/special-issues/cfp-special-long-term-human-motion-prediction).
 
-[[Paper](https://arxiv.org/abs/2007.00113)] [[Project](https://sites.google.com/view/mif-wlstm)]
+[[Paper](https://ieeexplore.ieee.org/abstract/document/9309334?casa_token=0zMcQjvmaxIAAAAA:nBXBLhZ1X31NUuLhcHa_YD3BpjTdmwfq46oPPut-2eBYtG3t4xODJvVPgX0Hgk8dsfkQgtETHsQ)] [[arXiv](https://arxiv.org/abs/2007.00113)] [[Project](https://sites.google.com/view/mif-wlstm)]
 
 Human behavior patterns with surrounding environments and intentions about the desired goal position provide critical information for forecasting long-term pedestrian trajectories. In this work, we introduce a Mutable Intention Filter and a Warp LSTM (MIF-WLSTM) to simultaneously estimate human intention and perform  trajectory prediction. 
 
