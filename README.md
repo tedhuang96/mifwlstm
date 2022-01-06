@@ -24,15 +24,15 @@ The Mutable Intention Filter propagates particles representing the belief over i
 ### Citation
 If you find this repo useful, please cite
 ```
-@article{huang2020long,
-  title={Long-term pedestrian trajectory prediction using mutable intention filter and warp lstm},
+@article{huang2021long,
+  title={Long-Term Pedestrian Trajectory Prediction Using Mutable Intention Filter and Warp LSTM},
   author={Huang, Zhe and Hasan, Aamir and Shin, Kazuki and Li, Ruohua and Driggs-Campbell, Katherine},
   journal={IEEE Robotics and Automation Letters},
+  year={2021},
   volume={6},
   number={2},
-  pages={542--549},
-  year={2020},
-  publisher={IEEE}
+  pages={542-549},
+  doi={10.1109/LRA.2020.3047731}
 }
 ```
 
